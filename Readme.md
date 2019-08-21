@@ -20,8 +20,8 @@ SWaPI supports the following Akamai OPEN APIs:
 	9. Contracts
 	10. Case Management
 	11. Fast DNS
-	11. PLX
-	12. Alerts
+	12. PLX
+	13. Alerts
 
 ## ALL IN ONE!!!
 &nbsp;
