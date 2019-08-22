@@ -94,7 +94,7 @@ If you still want to do this process manually, or having any issues, use pip to 
 
 Clone GIT:
 
-	$ git clone git@github.com:akamai-contrib/swapi.git
+	$ git clone https://github.com/akamai-contrib/swapi.git
 
 
 &nbsp;
