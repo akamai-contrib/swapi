@@ -165,13 +165,13 @@ locale.setlocale(locale.LC_ALL, '')
 encoding = locale.getpreferredencoding()
 
 
-VERSION = '3.1.5'
+VERSION = '3.1.7'
 '''
 
 Created by: Aurelio Somarriba Lucas
 Name: SWaPI
 CodeName: whiteRabbit
-Version: RC3.1.5 - Aug 20, 2019
+Version: RC3.1.7 - Aug 31, 2019
 
 New in 3.x.x:
 - Dockerize!!
@@ -944,7 +944,12 @@ def IAMModule(sqa,automation,host,AccountSwitch,propertyName,creds,groupId,apiOb
 			print bcolors.WHITE+'\n\n<!----------- SWaPI -----------!>\n\n'+bcolors.ENDC
 			sys.exit()
 		else:
-			url = "/identity-management/v1/open-identities/"+userId+"/account-switch-keys"
+			try:
+				url = "/identity-management/v1/open-identities/"+userId+"/account-switch-keys"
+			except:
+				print bcolors.TURQUO+"[IAM]"+bcolors.WARNING+" You need to provide a userId to search account: swapi.py iam apiclient --userId hkbaskhb12723"+bcolors.ENDC
+				print bcolors.WHITE+'\n\n<!----------- SWaPI -----------!>\n\n'+bcolors.ENDC
+				sys.exit()
 			params.update({'search':host})
 		result = s.get(urljoin(baseurl, url),params=params)
 		if result.status_code == 404 or result.status_code == 403:
@@ -1883,7 +1888,7 @@ def ContractsAPI(sqa,AccountSwitch,propertyName,creds,respjson,apiObject,contrac
 		print "-A 		- Provide an Account Switch Key or friendly name"
 		print "--depth 	- Returns a specific set of contracts. Select 'TOP' to return only parent contracts or 'ALL' to return both parent and child contracts."
 		print "--contractId 	- Unique contract identifier when displaying products. "
-		print "--from 		- The start date, in UTC, to use when looking for products associated with a contract. The default start date is 30 days prior to the current date."
+		print "--clone 	 		- The start date, in UTC, to use when looking for products associated with a contract. The default start date is 30 days prior to the current date."
 		print "--to 		- The end date, in UTC, to use when looking for products associated with a contract. The default end date is the current date."
 		print "--json 		- Return JSON response. Boolean."
 	print bcolors.WHITE+'\n\n<!----------- SWaPI -----------!>\n\n'+bcolors.ENDC
@@ -4059,7 +4064,8 @@ def caseManagement(duration,AccountSwitch,propertyName,creds,respjson,retrieveob
 			print bcolors.TURQUO+'[Case]'+bcolors.WARNING+' Excel report generated. File location: '+bcolors.WHITE+filename+bcolors.ENDC
 			print bcolors.TURQUO+'------------------------------------------------------------------------------------------------------------------------'
 			print bcolors.TURQUO+"\n[Case] "+bcolors.WARNING+"Status: "+bcolors.WHITE+"Successful"+bcolors.ENDC
-		print bcolors.WHITE+'\n\n<!----------- SWaPI -----------!>\n\n'+bcolors.ENDC
+		if not respjson:
+			print bcolors.WHITE+'\n\n<!----------- SWaPI -----------!>\n\n'+bcolors.ENDC
 		sys.exit()
 	elif retrieveobj == 'sub':
 		if category != None:
@@ -4516,7 +4522,7 @@ def plxAnalytics(AccountSwitch,propertyName,creds,respjson,apiObject,host,contra
 		sys.exit()
 
 
-def fastDNS(AccountSwitch,propertyName,creds,respjson,apiObject,type,host,contractId,groupId,zonesDiff,propertyVersion):
+def fastDNS(rsFile,AccountSwitch,propertyName,creds,respjson,apiObject,type,host,contractId,groupId,zonesDiff,propertyVersion):
 	if not respjson:
 		print bcolors.WHITE+'<!----------- SWaPI -----------!>\n'+bcolors.ENDC
 	home = expanduser("~")
@@ -4596,6 +4602,66 @@ def fastDNS(AccountSwitch,propertyName,creds,respjson,apiObject,type,host,contra
 		#pprint.pprint(result.json())
 		print bcolors.WHITE+'\n\n<!----------- SWaPI -----------!>\n\n'+bcolors.ENDC
 		sys.exit()
+	elif apiObject == 'add':
+		#print propertyName
+		headers = {'Content-Type':'application/json'}
+		if propertyName:
+			url = '/config-dns/v2/zones/'+propertyName+'/recordsets'
+		else:
+			print bcolors.TURQUO+'[DNS]'+bcolors.WARNING+' You need to provide a Zone Name with the -N option.'+bcolors.ENDC
+			print bcolors.WHITE+'\n<!----------- SWaPI -----------!>\n\n'+bcolors.ENDC
+			sys.exit()
+		if not rsFile:
+			print bcolors.TURQUO+"[DNS]"+bcolors.ENDC+bcolors.WARNING+" You need to provide an excel file with the record set to upload: --file files/fastdns.xlsx\n\n"+bcolors.ENDC
+			print bcolors.WHITE+'<!----------- SWaPI -----------!>\n\n'+bcolors.ENDC
+			sys.exit()
+		try:
+			fastDNSSheet = pd.read_excel(rsFile)
+		except:
+			print bcolors.TURQUO+"[DNS]"+bcolors.ENDC+bcolors.WARNING+" Unable to read file. Are you sure it exists?\n\n"+bcolors.ENDC
+			print bcolors.WHITE+'<!----------- SWaPI -----------!>\n\n'+bcolors.ENDC
+			sys.exit()
+		#print exclusionsSheet.shape[0]
+		nameColumn = fastDNSSheet['name']
+		typeColumn = fastDNSSheet['type']
+		ttlColumn = fastDNSSheet['ttl']
+		rdataColumn = fastDNSSheet['rdata']
+		recordsets = []
+		dnsTable = tt.Texttable()
+		dnsHeader = ['Name', 'Type', 'TTL','RDATA']
+		dnsTable.header(dnsHeader)
+		dnsTable.set_cols_width([25,15,10,80])
+		dnsTable.set_cols_align(['c','c','c','c'])
+		dnsTable.set_cols_valign(['m','m','m','m'])
+		for i in range (0,nameColumn.shape[0]):
+			if ',' in rdataColumn[i]:
+				rdataValues = rdataColumn[i].split(',')
+			else:
+				rdataValues = rdataColumn[i].split('\n')
+			record = {'name':nameColumn[i],'type':typeColumn[i],'ttl':str(ttlColumn[i]),'rdata':rdataValues}
+			recordsets.append(record)
+			dnsRow = [nameColumn[i],typeColumn[i],ttlColumn[i],rdataValues]
+			dnsTable.add_row(dnsRow)
+		postBody = {'recordsets':recordsets}
+		#print postBody
+		result = s.post(urljoin(baseurl, url),params=params, headers=headers, json=postBody)
+		if result.status_code == 200 or result.status_code == 204:
+			if respjson:
+				json_data = result.json()
+				formatted_json = json.dumps(json_data, indent=4, sort_keys=True)
+				colorful_json = highlight(unicode(formatted_json, 'UTF-8'), lexers.JsonLexer(), formatters.Terminal256Formatter())
+				#print colorful_json
+				print result.content
+				sys.exit()
+			else:
+				#print result.content
+				print bcolors.TURQUO+'[DNS]'+bcolors.WARNING+' Zone has been updated successfully with the following records:'+bcolors.ENDC
+				zoneTable = dnsTable.draw()
+				print zoneTable
+		else:
+			errorHandling(respjson,result.json())
+		print bcolors.WHITE+'\n<!----------- SWaPI -----------!>\n\n'+bcolors.ENDC
+		sys.exit()
 	elif apiObject == 'create':
 		#print propertyName
 		if propertyName:
@@ -4658,6 +4724,7 @@ def fastDNS(AccountSwitch,propertyName,creds,respjson,apiObject,type,host,contra
 			print bcolors.WHITE+'\n<!----------- SWaPI -----------!>\n\n'+bcolors.ENDC
 			sys.exit()
 		#print url
+		params.update({'showAll':True})
 		if type:
 			params.update({'types':type})
 		result = s.get(urljoin(baseurl, url),params=params)
@@ -5064,7 +5131,7 @@ def fastDNS(AccountSwitch,propertyName,creds,respjson,apiObject,type,host,contra
 		print bcolors.WHITE+'\n\n<!----------- SWaPI -----------!>\n\n'+bcolors.ENDC
 		sys.exit()
 	else:
-		print bcolors.WHITE+"This module allows you to use the Fast DNS API to view/modify/activate your Zone File Changes\n"+bcolors.ENDC
+		print bcolors.WHITE+"This module allows you to use the Fast DNS API to view/modify/activate your Zone File\n"+bcolors.ENDC
 		print bcolors.WARNING+"Fast DNS Retrieve Information:\n"+bcolors.ENDC
 		print "zones 		- List Fast DNS Zones"
 		print "records 	- List Record Set for a specific Zone"
@@ -5079,9 +5146,11 @@ def fastDNS(AccountSwitch,propertyName,creds,respjson,apiObject,type,host,contra
 		print "tsig 		- Retrieves a list of TSIG algorithms names"
 		print "diff 		- Displays differences between any two versions of a zone"
 		print bcolors.WARNING+"\nFast DNS Actions:\n"+bcolors.ENDC
+		print "add 		- Add records to your Zone using an Excel file"
 		print bcolors.WARNING+"\nAvailable Options:\n"+bcolors.ENDC
 		print "-N 		- This option is used to specify a Zone Name"
 		print "--type 		- Use this option to filter records by its type"
+		print "--file 		- When adding records to a Zone with the 'add' option, use this to specify file location"
 		print "--zones 	- Use this option to perform a diff between two versions"
 		print bcolors.WHITE+'\n\n<!----------- SWaPI -----------!>\n\n'+bcolors.ENDC
 		sys.exit()
@@ -5575,18 +5644,35 @@ python swapi.py appsec newVersion -N gHost -V10"""
 
 -N 		- Configuration Name
 -V 		- Configuration Version
--t 		- Hostnames (comma delimited)"
---mtarget 	- Match Target Sequence Number"
+-t 		- Hostnames (comma delimited)
+--mtarget 	- Match Target Sequence Number
+--emails 	- Activation emails. Required unless using the --noactivate function
 --noactivate 	- Don't activate configuration
 --noversion 	- Do not create a new version
 --path 		- Add path(s) to Match Target (Comma delimited)
+--clone 	- Used to clone a policy. Receives the policy ID as argument.
+--prefix 	- When cloning a policy, you can provide the desired prefix for your new policy.
+--policyId 	- When cloning a policy, this is a required option, since you need to provide a new policy name.
+--path 		- During match target creation, you can use this to specify a specific path.
 
 """+bcolors.UNDERLINE+bcolors.WARNING+"""Examples:"""+bcolors.ENDC+"""
 
+"""+bcolors.TURQUO+"""#1 - """+bcolors.WHITE+"""Create new version, add hostnames to selected hosts and match target. Finally, activate configuration in Staging:"""+bcolors.ENDC+"""
 python swapi.py appsec Integration -N asomarri -V4 -t swapi.akamai.io --mtarget 3 --emails asomarri@akamai.com
-python swapi.py appsec Integration -N asomarri -V4 -t www.techjam4.io,www.techjam.io2 --mtarget 1  --noactivate
-python swapi.py appsec Integration -N asomarri -V4 -t www.techjam.io1,jira.konanow.io --mtarget 1  --emails asomarri@akamai.com --noversion
-python swapi.py appsec Integration -N asomarri -V4 -t www.techjam.io1,jira.konanow.io --mtarget 1  --noactivate --noversion"""
+
+"""+bcolors.TURQUO+"""#2 - """+bcolors.WHITE+"""Create new version, add hostnames to selected hosts and match target (no activation):"""+bcolors.ENDC+"""
+python swapi.py appsec Integration -N asomarri -V4 -t www.swapi.com,ksd.swapi.com --mtarget 1  --noactivate
+
+"""+bcolors.TURQUO+"""#3 - """+bcolors.WHITE+"""Add hostnames to selected hosts and match target. Finally, activate configuration in Staging:"""+bcolors.ENDC+"""
+python swapi.py appsec Integration -N asomarri -V4 -t www.swapi.com,ksd.swapi.com --mtarget 1  --emails asomarri@akamai.com --noversion
+
+"""+bcolors.TURQUO+"""#4 - """+bcolors.WHITE+"""Add hostnames to selected hosts and match target:"""+bcolors.ENDC+"""
+python swapi.py appsec Integration -N asomarri -V4 -t www.swapi.com,ksd.swapi.com --mtarget 1  --noactivate --noversion
+
+"""+bcolors.TURQUO+"""#5 - """+bcolors.WHITE+"""Create new version, add hostnames to selected host, clone security policy, create new match target. Finally, activate configuration in Staging:"""+bcolors.ENDC+"""
+python swapi.py appsec Integration -N asomarri -V4 -t www.swapi.com --clone Gold_85876 --prefix Main --policyId 'Main Security Policy' --path '/*' --emails asomarri@akamai.com
+"""+bcolors.WARNING+"""NOTE:"""+bcolors.ENDC+""" By default, script will use same Bypass list as original clone policy."""+bcolors.ENDC+"""
+"""
 		elif retrieveobj == 'add' or retrieveobj == 'remove' or retrieveobj == 'new':
 			print bcolors.UNDERLINE+bcolors.WARNING+"""Available Options"""+bcolors.ENDC+"""
 
@@ -6025,25 +6111,37 @@ python swapi.py appsec remove -N asomarri --ruleId 635273 --policyId SuMe_60356"
 		if not host:
 			actionMenu()
 		if not seq and not policyId and not cloneFrom:
-			print bcolors.TURQUO+"[APPSEC]"+bcolors.ENDC+bcolors.WARNING+" Do you want to clone a policy and create a new match target or modify existing? Use: "+bcolors.ENDC
-			print bcolors.TURQUO+"[APPSEC]"+bcolors.ENDC+bcolors.WARNING+" --from - Clone Policy"+bcolors.ENDC
-			print bcolors.TURQUO+"[APPSEC]"+bcolors.ENDC+bcolors.WARNING+" --policyId - New Policy Name"+bcolors.ENDC
-			print bcolors.TURQUO+"[APPSEC]"+bcolors.ENDC+bcolors.WARNING+" --mtarget - Use existing match target, index/sequence # of match target\n\n"+bcolors.ENDC
+			print bcolors.TURQUO+" Integration Module can perform two actions: "+bcolors.ENDC
+			print bcolors.WHITE+" - Modify an existing match target. "+bcolors.ENDC
+			print bcolors.WHITE+" - Create a new one for a cloned policy. \n"+bcolors.ENDC
+			print bcolors.TURQUO+" \n If you want to use the Cloning Feature, use these options:"+bcolors.ENDC
+			print bcolors.WARNING+" Clone Policy: "+bcolors.OKGREEN+"--clone Gold_85876"+bcolors.ENDC
+			print bcolors.WARNING+" New Policy Name: "+bcolors.OKGREEN+"--policyId 'My New Policy'"+bcolors.ENDC
+			print bcolors.WARNING+" [optional] Policy ID Prefix (4 Characters): "+bcolors.OKGREEN+"--prefix PROD"+bcolors.ENDC
+			print bcolors.TURQUO+" \n If you want to modify an Existing Match Target, use this option:"+bcolors.ENDC
+			print bcolors.WARNING+" Use Match Target index number:"+bcolors.OKGREEN+" --mtarget 1\n\n"+bcolors.ENDC
 			print bcolors.WHITE+'<!----------- SWaPI -----------!>\n\n'+bcolors.ENDC
 			sys.exit()
 		if prefix:
 			if len(prefix) != 4:
-				print bcolors.TURQUO+"[APPSEC]"+bcolors.ENDC+bcolors.WARNING+" Prefix must be 4 characters long: --prefix FGCS\n\n"+bcolors.ENDC
+				print bcolors.TURQUO+"[APPSEC]"+bcolors.WARNING+" Prefix must be 4 characters long: "+bcolors.OKGREEN+"--prefix FGCS\n\n"+bcolors.ENDC
 				print bcolors.WHITE+'<!----------- SWaPI -----------!>\n\n'+bcolors.ENDC
 				sys.exit()
 		if cloneFrom:
 			if not policyId:
-				print bcolors.TURQUO+"[APPSEC]"+bcolors.ENDC+bcolors.WARNING+" What's the name of your new policy? Use: --policyId 'My New Policy'\n\n"+bcolors.ENDC
+				print bcolors.TURQUO+"[APPSEC]"+bcolors.WARNING+" What's the name of your new policy? Use: "+bcolors.OKGREEN+"--policyId 'My New Policy'\n\n"+bcolors.ENDC
 				print bcolors.WHITE+'<!----------- SWaPI -----------!>\n\n'+bcolors.ENDC
 				sys.exit()
 		if policyId:
 			if not cloneFrom:
-				print bcolors.TURQUO+"[APPSEC]"+bcolors.ENDC+bcolors.WARNING+" Which policy do you want to clone? Use: --from inmp_3422\n\n"+bcolors.ENDC
+				print bcolors.TURQUO+"[APPSEC]"+bcolors.WARNING+" Which policy do you want to clone? Use: "+bcolors.OKGREEN+"--clone inmp_3422\n\n"+bcolors.ENDC
+				print bcolors.WHITE+'<!----------- SWaPI -----------!>\n\n'+bcolors.ENDC
+				sys.exit()
+		if not path:
+			if defaultFile == 'NO_MATCH':
+				print bcolors.TURQUO+"[APPSEC]"+bcolors.WARNING+" Match Target defaultFile is set to "+bcolors.OKGREEN+"'NO_MATCH'"+bcolors.WARNING+" (default SWaPI setting). "+bcolors.ENDC
+				print bcolors.TURQUO+"[APPSEC]"+bcolors.WARNING+" Which means you need to provide a path with the "+bcolors.OKGREEN+"'--path'"+bcolors.WARNING+" option."+bcolors.ENDC
+				print bcolors.TURQUO+"[APPSEC]"+bcolors.WARNING+" Otherwise, change defaultFile value to "+bcolors.OKGREEN+"'BASE_MATCH'"+bcolors.WARNING+" or "+bcolors.OKGREEN+"'RECURSIVE_MATCH'"+bcolors.WARNING+".\n\n"+bcolors.ENDC
 				print bcolors.WHITE+'<!----------- SWaPI -----------!>\n\n'+bcolors.ENDC
 				sys.exit()
 		if not propertyVersion:
@@ -6056,29 +6154,33 @@ python swapi.py appsec remove -N asomarri --ruleId 635273 --policyId SuMe_60356"
 				propertyVersion = Version["Latest"]
 		if not noactivate:
 			if not emails:
-				actionMenu()
+				print bcolors.TURQUO+"[APPSEC]"+bcolors.WARNING+" Please provide the activation emails with the "+bcolors.OKGREEN+"'--emails'"+bcolors.WARNING+" option. "+bcolors.ENDC
+				print bcolors.WHITE+'<!----------- SWaPI -----------!>\n\n'+bcolors.ENDC
+				sys.exit()
 			if "," in emails:
 				emails = emails.split(",")
 			else:
 				emails = emails.split("\n")
 		#print emails
 		print bcolors.TURQUO+"\t\t-- Integration Module --"+bcolors.ENDC
-		print bcolors.TURQUO+"[APPSEC]"+bcolors.ENDC+bcolors.WARNING+" Friendly Name found and mapped to Account: "+AccountSwitch+bcolors.ENDC
+		print bcolors.TURQUO+"[APPSEC]"+bcolors.WARNING+" Friendly Name found and mapped to Account: "+bcolors.ENDC+AccountSwitch
 		#print propertyVersion
 		if "," in host:
 			configHostnames = host.split(",")
 		else:
 			configHostnames = host.split("\n")
-		try:
-			path
+		if path:
+			print 'path'
 			defaultFile = 'NO_MATCH'
 			if "," in path:
 				configPaths = path.split(",")
 			else:
 				configPaths = path.split("\n")
-		except:
+		else:
+			print defaultFile
 			configPaths = None
 		#print configHostnames
+		sys.exit()
 		if not noversion:
 			newPropertyVersion = newVersionAppsec(configId,propertyVersion)
 		else:
@@ -7123,6 +7225,13 @@ python swapi.py appsec remove -N asomarri --ruleId 635273 --policyId SuMe_60356"
 													prodhosts = ','.join(mtargetarray)
 													notfoundHosts = ','.join(mtargetnotFound)
 													mtpath = ','.join(mtpolicy['filePaths'])
+													try:
+														if mtpolicy['isNegativePathMatch'] == False:
+															mtpath = 'Positive Match: '+mtpath
+														else:
+															mtpath = 'Negative Match: '+mtpath
+													except:
+														pass
 												except:
 													prodhosts = ','.join(result.json()['selectedHosts'])
 													notfoundHosts = []
@@ -8792,6 +8901,7 @@ python swapi.py appsec remove -N asomarri --ruleId 635273 --policyId SuMe_60356"
 													if rateP['id'] == rateArray['id']:
 														if rateP['ipv4Action'] != recommendationRCColumn[i]:
 															correct = 'X'
+															APPROVED = False
 														tableRCArray = [policyIDRCColumn[i],rcControlIDColumn[i],rateArray['name'],rateP['ipv4Action'],recommendationRCColumn[i],rateArray['averageThreshold'],averageColumn[i],rateArray['burstThreshold'],burstColumn[i],correct]
 														RateControlTable.add_row(tableRCArray)
 													else:
@@ -8805,10 +8915,13 @@ python swapi.py appsec remove -N asomarri --ruleId 635273 --policyId SuMe_60356"
 										correct = u'\u2713'
 										if policy['slowPost']['action'] != recommendationRCColumn[i]:
 											correct = 'X'
+											APPROVED = False
 										if policy['slowPost']['slowRateThreshold']['rate'] != burstColumn[i]:
 											correct = 'X'
+											APPROVED = False
 										if policy['slowPost']['slowRateThreshold']['period'] != averageColumn[i]:
 											correct = 'X'
+											APPROVED = False
 										tableRCArray = [policyIDRCColumn[i],'NA',rcControlColumn[i],policy['slowPost']['action'],recommendationRCColumn[i],policy['slowPost']['slowRateThreshold']['period'],averageColumn[i],policy['slowPost']['slowRateThreshold']['rate'],burstColumn[i],correct]
 										RateControlTable.add_row(tableRCArray)
 								pass
@@ -8842,12 +8955,14 @@ python swapi.py appsec remove -N asomarri --ruleId 635273 --policyId SuMe_60356"
 										correct = u'\u2713'
 										if clientRepArray['threshold'] != thresholdColumn[i]:
 											correct = 'X'
+											APPROVED = False
 										for policy in result.json()['securityPolicies']:
 											if policy['id'] == policyIDCRColumn[i]:
 												for clientCR in policy['clientReputation']['reputationProfileActions']:
 													if clientCR['id'] == clientRepArray['id']:
 														if clientCR['action'] != recommendationCRColumn[i]:
 															correct = 'X'
+															APPROVED = False
 														tableCRArray = [policyIDCRColumn[i],profileCRColumn[i],clientCR['action'],recommendationCRColumn[i],clientRepArray['threshold'],thresholdColumn[i],correct]
 														ClientRepTable.add_row(tableCRArray)
 													else:
@@ -9609,7 +9724,7 @@ python swapi.py appsec remove -N asomarri --ruleId 635273 --policyId SuMe_60356"
 			print bcolors.WHITE+'<!----------- SWaPI -----------!>\n\n'+bcolors.ENDC
 			sys.exit()
 		elif not cloneFrom:
-			print bcolors.TURQUO+"[APPSEC]"+bcolors.ENDC+bcolors.WARNING+" You need to specify which policy to clone: --from clonePolicy \n\n"+bcolors.ENDC
+			print bcolors.TURQUO+"[APPSEC]"+bcolors.ENDC+bcolors.WARNING+" You need to specify which policy to clone: --clone clonePolicy \n\n"+bcolors.ENDC
 			print bcolors.WHITE+'<!----------- SWaPI -----------!>\n\n'+bcolors.ENDC
 			sys.exit()
 		else:
@@ -10887,7 +11002,7 @@ def PAPI(automation,AccountSwitch,stagingPush,srto,origin,host,retrieveobj,contr
 			sys.exit()
 		#contractId,groupId,productId,propertyId,propertyVersion,eTag = InfoGathering()
 		if not cloneFrom:
-			print bcolors.WARNING+"Please specify a configuration name to Clone From with the '--from' option.\n\n"+bcolors.ENDC
+			print bcolors.WARNING+"Please specify a configuration name to Clone From with the '--clone' option.\n\n"+bcolors.ENDC
 			print bcolors.WHITE+'<!----------- SWaPI -----------!>\n\n'+bcolors.ENDC
 			sys.exit()
 		contractId,groupId,productId,propertyId,propertyVersion,eTag = Search(None,cloneFrom,None,propertyVersion)
@@ -12191,8 +12306,8 @@ python swapi.py appsec policies -N asomarri
 					help="Used by APPSEC Match Target to specify a negative path match: --negativePath")
 	group.add_option("--generate", action="store_true", dest="generate", default=False,
 					help="Used by APPSEC Peer Review Module to generate an Exclusion Excel Sheet: --generate")
-	group.add_option("--defaultFile", type='choice', action="store", dest="defaultFile",choices=["NO_MATCH","BASE_MATCH","RECURSIVE_MATCH"],default="BASE_MATCH",
-					help="Used by APPSEC Match Target to specify a description of the rule to match on paths.  --defaultFile NO_MATCH. Default: BASE_MATCH")
+	group.add_option("--defaultFile", type='choice', action="store", dest="defaultFile",choices=["NO_MATCH","BASE_MATCH","RECURSIVE_MATCH"],default="NO_MATCH",
+					help="Used by APPSEC Match Target to specify a description of the rule to match on paths.  --defaultFile BASE_MATCH. Default: NO_MATCH")
 	group.add_option("--bypass", type='string', dest="bypass",
 					help="Used by APPSEC Match Target to specify a Bypass Network List ID: --bypass 1304427_AAXXBBLIST")
 	parser.add_option_group(group)
@@ -12265,6 +12380,8 @@ python swapi.py appsec policies -N asomarri
 	group = OptionGroup(parser, bcolors.OKBLUE+"SWaPI - Fast DNS"+bcolors.ENDC,"\n")
 	group.add_option("--zones", type='string', nargs=2, dest="zonesDiff",
 					help="If you want to perform a diff between two versions, use this option: --zones versionID1 versionID2")
+	group.add_option("--file", type='string', dest="file",
+					help="If you want to create recordsets based on an excel sheet, use this option: --file files/fastDNS-customer.xlsx")
 	parser.add_option_group(group)
 	group = OptionGroup(parser, bcolors.OKBLUE+"SWaPI General Options"+bcolors.ENDC,"\n")
 #					help="Trigger Akamai's Average Rate Control") 'retrieve', 'modify', 'update', 'deactivate','activate', 'delete', 'formats', 'create'
@@ -12272,8 +12389,8 @@ python swapi.py appsec policies -N asomarri
 					help="If you want to retrive information about a particular edgehostname, you can specify: --edgeId ehn_2436253")
 	group.add_option("--creds", type='string', default="default", dest="creds",
 					help="If you want to specify a set of credentials from your EdgeRC file: --creds entsec")
-	group.add_option("--from", type='string', dest="cloneFrom",
-					help="If you want to specify the property name: --from SuperMetroid")
+	group.add_option("--clone", type='string', dest="cloneFrom",
+					help="If you want to specify the property name: --clone SuperMetroid")
 	group.add_option("-V","--propertyVersion", type='string', dest="propertyVersion",
 					help="If you want to specify the property version: --propertyVersion 1")
 	group.add_option("--ruleTree", action="store_true", dest="ruleTree", default=False,
@@ -12554,7 +12671,7 @@ Delete Configuration (only works if no configuration is active in either Staging
 python swapi.py papi delete -N TDKS
 
 New Configuration in same group as "from" configuration (does NOT clone the configuration):
-python swapi.py papi create -N MortalKombat --from SuperMetroid
+python swapi.py papi create -N MortalKombat --clone SuperMetroid
 
 """+bcolors.UNDERLINE+"""EDGEHOSTNAMES (FF Only)"""+bcolors.ENDC+"""
 python swapi.py papi create -N Megaman -E staging-megaman.akamaiu.com.edgesuite.net
@@ -12570,13 +12687,13 @@ python swapi.py papi create -N IBMMain --cpcode 'IBM Main'
 -CLONING COMMANDS-
 
 Cloning a configuration (Clones latest version):
-python swapi.py papi clone -N Megaman --from SuperMetroid
+python swapi.py papi clone -N Megaman --clone SuperMetroid
 
 Cloning a specific version:
-python swapi.py papi clone -N Megaman --from SuperMetroid -V4
+python swapi.py papi clone -N Megaman --clone SuperMetroid -V4
 
 Cloning a configuration, including hostnames:
-python swapi.py papi clone -N Megaman --from SuperMetroid --copyHosts
+python swapi.py papi clone -N Megaman --clone SuperMetroid --copyHosts
 
 
 -ACTIVATION COMMANDS-
@@ -12982,7 +13099,7 @@ python swapi.py CPS secureEdge --contract 3-TWDH9B --group 33119 (SPS API)
 	elif apiModule == 'plx':
 		plxAnalytics(options.AccountSwitch,options.propertyName,options.creds,options.respjson,apiObject,options.host,options.contractId,options.groupId,options.start,options.end,options.attack)
 	elif apiModule == 'dns':
-		fastDNS(options.AccountSwitch,options.propertyName,options.creds,options.respjson,apiObject,options.listType,options.host,options.contractId,options.groupId,options.zonesDiff,options.propertyVersion)
+		fastDNS(options.file,options.AccountSwitch,options.propertyName,options.creds,options.respjson,apiObject,options.listType,options.host,options.contractId,options.groupId,options.zonesDiff,options.propertyVersion)
 	elif apiModule == 'secmon':
 		SecMon(options.automation,options.AccountSwitch,apiObject,options.reportPackId,options.respjson,options.creds)
 	elif apiModule == 'cps' or apiModule == 'sps':
